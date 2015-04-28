@@ -160,7 +160,7 @@ describe('Behaviors', function() {
     });
 
     it('should set _behaviors', function() {
-      expect(this.view._behaviors.length).to.be.equal(1);
+      expect(this.view._behaviors.length).to.equal(1);
     });
   });
 
@@ -816,4 +816,44 @@ describe('Behaviors', function() {
       expect(this.behavior.destroy).to.have.returned(this.behavior);
     });
   });
+
+  describe('adding behaviors to view instance', function() {
+    beforeEach(function() {
+      this.behaviors = {foo: Marionette.Behavior, bar: Marionette.Behavior};
+      Marionette.Behaviors.behaviorsLookup = this.behaviors;
+      this.view = new Marionette.View();
+    });
+
+    it('should add behaviors to view', function() {
+        this.view.addBehavior('foo', {});
+        expect(this.view._behaviors.length).to.equal(1);
+    });
+
+    describe.only('key collision', function() {
+        beforeEach(function() {
+            this.view.addBehavior('foo', {});
+        });
+        it('should throw error', function() {
+            expect(this.view.addBehavior.bind(this.view, 'foo', {}))
+            .to.throw(Error);
+        });
+        it('should overwrite if {overwrite:true}', function() {
+            expect(this.view.addBehavior.bind(this.view, 'foo', {overwrite:true}));
+            expect(this.view._behaviors.length).to.equal(1);
+        });
+    });
+  });
+
+  describe('removing behaviors from view instance', function() {
+    beforeEach(function() {
+      this.behaviors = {foo: Marionette.Behavior};
+      Marionette.Behaviors.behaviorsLookup = this.behaviors;
+      this.view = new Marionette.View();
+    });
+
+    it('should remove behaviors from view', function() {
+        this.fail();
+    });
+  });
+
 });

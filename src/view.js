@@ -272,7 +272,7 @@ Marionette.View = Backbone.View.extend({
     // proxy behavior $el to the view's $el.
     // This is needed because a view's $el proxy
     // is not set until after setElement is called.
-    _.invoke(this._behaviors, 'proxyViewProperties', this);
+    Marionette.Behaviors.onSetElement(this);
 
     return ret;
   },
@@ -372,5 +372,10 @@ Marionette.View = Backbone.View.extend({
   bindEntityEvents: Marionette.proxyBindEntityEvents,
 
   // Proxy `unbindEntityEvents` to enable unbinding view's events from another entity.
-  unbindEntityEvents: Marionette.proxyUnbindEntityEvents
+  unbindEntityEvents: Marionette.proxyUnbindEntityEvents,
+
+  // Add a single behavior.
+  addBehavior: function(key, behaviorOpts, addOpts) {
+    return Marionette.Behaviors.addBehavior(this, key, behaviorOpts, addOpts);
+  }
 });

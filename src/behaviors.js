@@ -13,7 +13,6 @@ Marionette.Behaviors = (function(Marionette, _) {
   var delegateEventSplitter = /^(\S+)\s*(.*)$/;
 
   function Behaviors(view, behaviors) {
-
     if (!_.isObject(view.behaviors)) {
       return {};
     }
@@ -26,7 +25,7 @@ Marionette.Behaviors = (function(Marionette, _) {
     // calling the methods first on each behavior
     // and then eventually calling the method on the view.
     Behaviors.wrap(view, behaviors, _.keys(methods));
-    return behaviors;
+    return Behaviors._flattenBehaviors(behaviors);
   }
 
   var methods = {
@@ -109,16 +108,27 @@ Marionette.Behaviors = (function(Marionette, _) {
     // Iterate over the behaviors object, for each behavior
     // instantiate it and get its grouped behaviors.
     // This accepts a list of behaviors in either an object or array form
-    parseBehaviors: function(view, behaviors) {
-      return _.chain(behaviors).map(function(options, key) {
+    // Returns object containing key => {behavior:{}, children: []} pairs,
+    // forming a tree.
+    // NOTE: If a behavior is referenced multiple times in the tree,
+    // only the first reference closest to the root of the tree will be
+    // instantiated. The other references will point to that instance.
+    // This means that you can't really pass options to nested behaviors.
+    parseBehaviors: function(view, behaviors, instanceCache) {
+      instanceCache = instanceCache || {};
+      var parsedBehaviors = {};
+      _.chain(behaviors).map(function(options, key) {
         var BehaviorClass = Behaviors.getBehaviorClass(options, key);
         //if we're passed a class directly instead of an object
         var _options = options === BehaviorClass ? {} : options;
-        var behavior = new BehaviorClass(_options, view);
-        var nestedBehaviors = Behaviors.parseBehaviors(view, _.result(behavior, 'behaviors'));
-
-        return [behavior].concat(nestedBehaviors);
-      }).flatten().value();
+        if (! instanceCache[key]) {
+          instanceCache[key] = new BehaviorClass(_options, view);
+        }
+        var behavior = instanceCache[key];
+        var nestedBehaviors = Behaviors.parseBehaviors(view, _.result(behavior, 'behaviors'), instanceCache);
+        parsedBehaviors[key] = {'behavior': behavior, 'children': nestedBehaviors};
+      });
+      return parsedBehaviors;
     },
 
     // Wrap view internal methods so that they delegate to behaviors. For example,
@@ -127,9 +137,51 @@ Marionette.Behaviors = (function(Marionette, _) {
     //
     // `view.delegateEvents = _.partial(methods.delegateEvents, view.delegateEvents, behaviors);`
     wrap: function(view, behaviors, methodNames) {
+      // Save the original methods in case we unwrap later.
+      // Assumes that behaviors will always be updated as a batch.
+      view._behaviorsPreWrappedMethods = {};
+      var flattenedBehaviors = this._flattenBehaviors(behaviors);
       _.each(methodNames, function(methodName) {
-        view[methodName] = _.partial(methods[methodName], view[methodName], behaviors);
-      });
+        view._behaviorsPreWrappedMethods[methodName] = view[methodName];
+        view[methodName] = _.partial(methods[methodName], view[methodName],
+          flattenedBehaviors);
+      }, this);
+    },
+
+    // Restore a view's original unwrapped methods.
+    unwrap: function(view, methodNames) {
+      _.each(methodNames, function(methodName) {
+        view[methodName] = view._behaviorsPreWrappedMethods[methodName];
+      }, this);
+    },
+
+    _flattenBehaviors: function(behaviorsTree) {
+      var flattenedBehaviors = [];
+      _.each(behaviorsTree, function(item, key) {
+        flattenedBehaviors.push(item.behavior);
+        if (item.children) {
+          flattenedBehaviors = flattenedBehaviors.concat(
+            this._flattenBehaviors(item.children));
+        }
+      }, this);
+      return flattenedBehaviors;
+    },
+
+
+    onSetElement: function(view) {
+      _.invoke(view._behaviors, 'proxyViewProperties', view);
+    },
+
+    // Add a single behavior to a view.
+    addBehavior: function(view, key, behaviorOpts, addOpts) {
+      
+      // Assemble single behavior into object, for parseBehaviors function.
+      var behaviors = {};
+      behaviors[key] = behaviorOpts;
+      var parsedBehaviors = Behaviors.parseBehaviors(view, behaviors);
+      Behaviors.wrap(view, parsedBehaviors, _.keys(methods));
+      view._behaviors[key] = parsedBehaviors[key];
+      return parsedBehaviors[key];
     }
   });
 
